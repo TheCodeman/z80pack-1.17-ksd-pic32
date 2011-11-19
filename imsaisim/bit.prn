@@ -1,0 +1,95 @@
+1
+ 8080 MACRO ASSEMBLER, VER 3.0        ERRORS = 0      
++                                                      13:50  09/04/2008
++                                                                                      PAGE 1
+      
+
+
+                   ;
+                   ; REGISTER B   = CURRENT LIGHT CONTENTS
+                   ; REGISTER C   = SWITCH DEBOUNCE INDICATOR
+                   ;                (HAVE SWITCHES CHANGED SINCE LAST LIGHT SHIFT)
+                   ;                 0 = NO, HAVE NOT CHANGED, CHANGES WILL BE RECOGNIZED
+                   ;                 1 = YES, ONE CHG OCCURED, FURTHER CHANGES IGNORED
+                   ; REGISTER D   = LAST SWITCH SETTING
+                   ; REGISTER E   = CURRENT SWITCH SETTING
+                   ; REGISTER H,L = DELAY COUNTER
+                   ; REGISTER SP  = DELAY COUNTER INCREMENT
+                   ;
+   0000                    ORG     0
+                   ;
+   0000   AF       START:  XRA     A               ;A=0
+   0001   67               MOV     H,A             ;SET DELAY COUNTER TO ZERO
+   0002   DBFF             IN      0FFH            ;READ THE SWITCHES
+   0004   6F               MOV     L,A             ;SAVE THE INCREMENT VALUE AS INITIAL VALUE
+   0005   F9               SPHL                    ;SAVE THE INCREMENT IN SP
+                   ;
+                   ; SEE IF SWITCHES HAVE CHANGED SINCE LAST LIGHT SHIFT (BASED ON FLAG IN C)
+                   ;
+                   ; ONLY ONCE SWITCH CHANGE (THE FIRST) PER LIGHT SHIFT IS RECOGNIZED,
+                   ; FURTHER SWITCH CHANGES ARE IGNORED
+                   ;
+   0006   AF       LOOP:   XRA     A               ;A=0
+   0007   81               ADD     C               ;A=C, THE DEBOUNCE FLAG
+   0008   C21300           JNZ     TESTROT         ;DEBOUNCING, IGNORE SW CHGS, TEST FOR ROTATE
+                   ;
+                   ; SWITCHES HAVE NOT CHANGED SINCE LAST LIGHT SHIFT,  GET THE SWITCH VALUE
+                   ; AND SEE IF THEY HAVE CHANGED
+                   ;
+   000B   53       GETSW:  MOV     D,E             ;LAST SWITCH SETTING = CURRENT SWITCH SETTING
+   000C   DBFF             IN      0FFH            ;READ SWITCHES
+   000E   5F               MOV     E,A             ;NEW CURRENT SWITCH SETTING
+   000F   AA               XRA     D               ;IS NEW SAME AS LAST ?
+   0010   C22100           JNZ     CHANGED         ;NO, SWITCHES HAVE CHANGED
+                   ;
+                   ; SWITCHE CHGS BEING IGNORED, SEE IF IT'S TIME TO ROTATE THE LIGHTS
+                   ;
+   0013   39       TESTROT:DAD     SP              ;ADD INCREMENT IN SP TO COUNTER IN H,L
+   0014   D20600           JNC     LOOP            ;DID THE COUNTER OVERFLOW ?
+                   ;
+                   ; IT'S TIME TO SHIFT THE LIGHTS LEFT
+                   ;
+   0017   78       ROTATE: MOV     A,B             ;GET THE LIGHT PATTERN
+   0018   07               RLC                     ;SHIFT IT LEFT
+   0019   47               MOV     B,A             ;SAVE IT AS THE NEW LIGHT PATTERN
+   001A   D3FF             OUT     0FFH            ;WRITE THE LIGHTS
+   001C   AF               XRA     A               ;GET A ZERO
+   001D   4F               MOV     C,A             ;SHOW NO SWITCH CHGS SINCE LAST SHIFT
+   001E   C30600           JMP     LOOP            ;CONTINUE
+1
+ 8080 MACRO ASSEMBLER, VER 3.0        ERRORS = 0      
++                                                      13:50  09/04/2008
++                                                                                      PAGE 2
+      
+
+
+                   ;
+                   ;THE SWITCHES HAVE CHANGED, REVISE THE DISPLAY AND CONTINUE
+                   ;
+   0021   A8       CHANGED:XRA     B               ;FORM THE NEW DISPLAY
+   0022   47               MOV     B,A             ;SAVE IT
+   0023   D3FF             OUT     0FFH            ;WRITE IT TO THE LIGHTS
+   0025   AF               XRA     A               ;NOW A=0
+   0026   67               MOV     H,A             ;CLEAR DELAY COUNTER
+   0027   2F               CMA                     ;NOW A=0FFH
+   0028   4F               MOV     C,A             ;SHOW THAT SWITCHES JUST CHANGED
+   0029   C30600           JMP     LOOP            ;GO TO DEBOUNCE LOOP
+                   ;
+   0000                    END     START
+ NO PROGRAM ERRORS
+1
+ 8080 MACRO ASSEMBLER, VER 3.0        ERRORS = 0      
++                                                      13:50  09/04/2008
++                                                                                      PAGE 3
+      
+
+
+                        SYMBOL TABLE
+
+  * 01
+
+  A      0007      B      0000      C      0001      CHANG  0021      
+  D      0002      E      0003      GETSW  000B *    H      0004      
+  L      0005      LOOP   0006      M      0006      PSW    0006      
+  ROTAT  0017 *    SP     0006      START  0000      TESTR  0013      
+  

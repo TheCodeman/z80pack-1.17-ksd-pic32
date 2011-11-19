@@ -1,0 +1,95 @@
+Z80-Assembler		Release 1.6				Page 1
+Source file: boot.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                       1      1 ;	CP/M 3 boot-loader for Z80-Simulator
+                       2      2 ;
+                       3      3 ;	Copyright (C) 1989-2007 by Udo Munk
+                       4      4 ;
+                       5      5 	ORG	0		;mem base of boot
+                       6      6 ;
+0100                   7      7 BOOT	EQU	0100H		;cpmldr runs at 0100H
+0019                   8      8 SECTS	EQU	25		;# of sectors to load
+                       9      9 ;
+                      10     10 ;	I/O ports
+                      11     11 ;
+0001                  12     12 CONDAT	EQU	1		;console data port
+000a                  13     13 DRIVE   EQU	10		;fdc-port: # of drive
+000b                  14     14 TRACK   EQU	11		;fdc-port: # of track
+000c                  15     15 SECTOR  EQU	12		;fdc-port: # of sector
+000d                  16     16 FDCOP   EQU	13		;fdc-port: command
+000e                  17     17 FDCST   EQU	14		;fdc-port: status
+000f                  18     18 DMAL    EQU	15		;dma-port: dma address low
+0010                  19     19 DMAH    EQU	16		;dma-port: dma address high
+                      20     20 ;
+0000  c3 19 00        21     21 	JP	COLD
+                      22     22 ;
+0003  42 4f 4f 54     23     23 ERRMSG: DEFM	'BOOT: error booting'
+0007  3a 20 65 72     23     24
+000b  72 6f 72 20     23     25
+000f  62 6f 6f 74     23     26
+0013  69 6e 67        23     27
+0016  0d 0a 00        24     28 	DEFB	13,10,0
+                      25     29 ;
+                      26     30 ;	begin the load operation
+                      27     31 ;
+0019  0e 02           28     32 COLD:	LD	C,2		;c=sector 2
+001b  16 19           29     33 	LD	D,SECTS		;d=# sectors to load
+001d  21 00 01        30     34 	LD	HL,BOOT		;base transfer address
+0020  3e 00           31     35 	LD	A,0		;select drive A
+0022  d3 0a           32     36 	OUT	(DRIVE),A
+0024  d3 0b           33     37 	OUT	(TRACK),A	;set track 0
+                      34     38 ;
+                      35     39 ;	load the next sector
+                      36     40 ;
+0026  79              37     41 LSECT:	LD	A,C		;set sector
+0027  d3 0c           38     42 	OUT	(SECTOR),A
+0029  7d              39     43 	LD	A,L		;set dma address low
+002a  d3 0f           40     44 	OUT	(DMAL),A
+002c  7c              41     45 	LD	A,H		;set dma address high
+002d  d3 10           42     46 	OUT	(DMAH),A
+002f  af              43     47 	XOR	A		;read sector
+0030  d3 0d           44     48 	OUT	(FDCOP),A
+0032  db 0e           45     49 	IN	A,(FDCST)	;get status of fdc
+0034  b7              46     50 	OR	A		;read successful ?
+0035  ca 48 00        47     51 	JP	Z,CONT		;yes, continue
+0038  21 03 00        48     52 	LD	HL,ERRMSG	;no, print error
+003b  7e              49     53 PRTMSG:	LD	A,(HL)
+003c  b7              50     54 	OR	A
+003d  ca 46 00        51     55 	JP	Z,STOP
+0040  d3 01           52     56 	OUT	(CONDAT),A
+0042  23              53     57 	INC	HL
+0043  c3 3b 00        54     58 	JP	PRTMSG
+0046  f3              55     59 STOP:	DI
+0047  76              56     60 	HALT			;and halt cpu
+Z80-Assembler		Release 1.6				Page 2
+Source file: boot.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                      57     61 ;
+                      58     62 CONT:
+                      59     63 				;go to next sector if load is incomplete
+0048  15              60     64 	DEC	D		;sects=sects-1
+0049  ca 00 01        61     65 	JP	Z,BOOT		;head for cpmldr
+                      62     66 ;
+                      63     67 ;	more sectors to load
+                      64     68 ;
+                      65     69 ;	we aren't using a stack, so use <sp> as scratch register
+                      66     70 ;	to hold the load address increment
+                      67     71 ;
+004c  31 80 00        68     72 	LD	SP,128		;128 bytes per sector
+004f  39              69     73 	ADD	HL,SP		;<hl> = <hl> + 128
+0050  0c              70     74 	INC	C		;sector = sector + 1
+0051  c3 26 00        71     75 	JP	LSECT		;go read another
+                      72     76 ;
+0054                  73     77 	END			;of boot loader
+Z80-Assembler		Release 1.6				Page 3
+Source file: boot.asm
+Title:       Symboltable
+
+BOOT     0100	COLD     0019	CONDAT   0001	CONT     0048	
+DMAH     0010	DMAL     000f	DRIVE    000a	ERRMSG   0003	
+FDCOP    000d	FDCST    000e	LSECT    0026	PRTMSG   003b	
+SECTOR   000c	SECTS    0019	STOP     0046	TRACK    000b	

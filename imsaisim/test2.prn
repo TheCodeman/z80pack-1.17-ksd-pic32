@@ -1,0 +1,34 @@
+1
+ 8080 MACRO ASSEMBLER, VER 3.0        ERRORS = 0      
++                                                      17:48  08/28/2008
++                                                                                      PAGE 1
+      
+
+
+                   ;
+                   ;       TEST PROGRAM 2 FROM IMSAI 8080 USERS MANUAL
+                   ;
+   0000                    ORG     0
+                    
+   0000   DBFF     L1:     IN      0FFH
+   0002   2F               CMA
+   0003   D3FF             OUT     0FFH
+   0005   C30000           JMP     L1
+                    
+                           END
+ NO PROGRAM ERRORS
+1
+ 8080 MACRO ASSEMBLER, VER 3.0        ERRORS = 0      
++                                                      17:48  08/28/2008
++                                                                                      PAGE 2
+      
+
+
+                        SYMBOL TABLE
+
+  * 01
+
+  A      0007      B      0000      C      0001      D      0002      
+  E      0003      H      0004      L      0005      L1     0000      
+  M      0006      PSW    0006      SP     0006      
+

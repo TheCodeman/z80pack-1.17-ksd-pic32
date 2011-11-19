@@ -1,0 +1,469 @@
+Z80-Assembler		Release 1.6				Page 1
+Source file: bios.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                       1      1 ;	Z80 CBIOS for Z80-Simulator
+                       2      2 ;
+                       3      3 ;	Copyright (C) 1988-2007 by Udo Munk
+                       4      4 ;
+0040                   5      5 MSIZE	EQU	64		;cp/m version memory size in kilobytes
+                       6      6 ;
+                       7      7 ;	"bias" is address offset from 3400H for memory systems
+                       8      8 ;	than 16K (referred to as "b" throughout the text).
+                       9      9 ;
+b000                  10     10 BIAS	EQU	(MSIZE-20)*1024
+e400                  11     11 CCP	EQU	3400H+BIAS	;base of ccp
+ec06                  12     12 BDOS	EQU	CCP+806H	;base of bdos
+fa00                  13     13 BIOS	EQU	CCP+1600H	;base of bios
+002c                  14     14 NSECTS	EQU	(BIOS-CCP)/128	;warm start sector count
+0004                  15     15 CDISK	EQU	0004H		;current disk number 0=A,...,15=P
+0003                  16     16 IOBYTE	EQU	0003H		;intel i/o byte
+                      17     17 ;
+                      18     18 ;	I/O ports
+                      19     19 ;
+0000                  20     20 CONSTA	EQU	0		;console status port
+0001                  21     21 CONDAT	EQU	1		;console data port
+0002                  22     22 PRTSTA	EQU	2		;printer status port
+0003                  23     23 PRTDAT	EQU	3		;printer data port
+0005                  24     24 AUXDAT	EQU	5		;auxiliary data port
+000a                  25     25 FDCD	EQU	10		;fdc-port: # of drive
+000b                  26     26 FDCT	EQU	11		;fdc-port: # of track
+000c                  27     27 FDCS	EQU	12		;fdc-port: # of sector
+000d                  28     28 FDCOP	EQU	13		;fdc-port: command
+000e                  29     29 FDCST	EQU	14		;fdc-port: status
+000f                  30     30 DMAL	EQU	15		;dma-port: dma address low
+0010                  31     31 DMAH	EQU	16		;dma-port: dma address high
+                      32     32 ;
+                      33     33 	ORG	BIOS		;origin of this program
+                      34     34 ;
+                      35     35 ;	jump vector for individual subroutines
+                      36     36 ;
+fa00  c3 3e fb        37     37 	JP	BOOT		;cold start
+fa03  c3 51 fb        38     38 WBOOTE: JP	WBOOT		;warm start
+fa06  c3 bc fb        39     39 	JP	CONST		;console status
+fa09  c3 bf fb        40     40 	JP	CONIN		;console character in
+fa0c  c3 c2 fb        41     41 	JP	CONOUT		;console character out
+fa0f  c3 c6 fb        42     42 	JP	LIST		;list character out
+fa12  c3 cd fb        43     43 	JP	PUNCH		;punch character out
+fa15  c3 d1 fb        44     44 	JP	READER		;reader character in
+fa18  c3 d4 fb        45     45 	JP	HOME		;move head to home position
+fa1b  c3 d9 fb        46     46 	JP	SELDSK		;select disk
+fa1e  c3 05 fc        47     47 	JP	SETTRK		;set track number
+fa21  c3 09 fc        48     48 	JP	SETSEC		;set sector number
+fa24  c3 1e fc        49     49 	JP	SETDMA		;set dma address
+fa27  c3 25 fc        50     50 	JP	READ		;read disk
+fa2a  c3 29 fc        51     51 	JP	WRITE		;write disk
+fa2d  c3 ca fb        52     52 	JP	LISTST		;return list status
+fa30  c3 0d fc        53     53 	JP	SECTRAN		;sector translate
+                      54     54 ;
+                      55     55 ;	fixed data tables for four-drive standard
+                      56     56 ;	IBM-compatible 8" SD disks
+                      57     57 ;
+                      58     58 ;	disk parameter header for disk 00
+fa33  73 fa 00 00     59     59 DPBASE:	DEFW	TRANS,0000H
+fa37  00 00 00 00     60     60 	DEFW	0000H,0000H
+Z80-Assembler		Release 1.6				Page 2
+Source file: bios.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+fa3b  30 fc 8d fa     61     61 	DEFW	DIRBF,DPBLK
+fa3f  2a ff b0 fc     62     62 	DEFW	CHK00,ALL00
+                      63     63 ;	disk parameter header for disk 01
+fa43  73 fa 00 00     64     64 	DEFW	TRANS,0000H
+fa47  00 00 00 00     65     65 	DEFW	0000H,0000H
+fa4b  30 fc 8d fa     66     66 	DEFW	DIRBF,DPBLK
+fa4f  3a ff cf fc     67     67 	DEFW	CHK01,ALL01
+                      68     68 ;	disk parameter header for disk 02
+fa53  73 fa 00 00     69     69 	DEFW	TRANS,0000H
+fa57  00 00 00 00     70     70 	DEFW	0000H,0000H
+fa5b  30 fc 8d fa     71     71 	DEFW	DIRBF,DPBLK
+fa5f  4a ff ee fc     72     72 	DEFW	CHK02,ALL02
+                      73     73 ;	disk parameter header for disk 03
+fa63  73 fa 00 00     74     74 	DEFW	TRANS,0000H
+fa67  00 00 00 00     75     75 	DEFW	0000H,0000H
+fa6b  30 fc 8d fa     76     76 	DEFW	DIRBF,DPBLK
+fa6f  5a ff 0d fd     77     77 	DEFW	CHK03,ALL03
+                      78     78 ;
+                      79     79 ;	sector translate vector for the IBM 8" SD disks
+                      80     80 ;
+fa73  01 07 0d 13     81     81 TRANS:	DEFB	1,7,13,19	;sectors 1,2,3,4
+fa77  19 05 0b 11     82     82 	DEFB	25,5,11,17	;sectors 5,6,7,8
+fa7b  17 03 09 0f     83     83 	DEFB	23,3,9,15	;sectors 9,10,11,12
+fa7f  15 02 08 0e     84     84 	DEFB	21,2,8,14	;sectors 13,14,15,16
+fa83  14 1a 06 0c     85     85 	DEFB	20,26,6,12	;sectors 17,18,19,20
+fa87  12 18 04 0a     86     86 	DEFB	18,24,4,10	;sectors 21,22,23,24
+fa8b  10 16           87     87 	DEFB	16,22		;sectors 25,26
+                      88     88 ;
+                      89     89 ;	disk parameter block, common to all IBM 8" SD disks
+                      90     90 ;
+fa8d  1a 00           91     91 DPBLK:  DEFW	26		;sectors per track
+fa8f  03              92     92 	DEFB	3		;block shift factor
+fa90  07              93     93 	DEFB	7		;block mask
+fa91  00              94     94 	DEFB	0		;extent mask
+fa92  f2 00           95     95 	DEFW	242		;disk size-1
+fa94  3f 00           96     96 	DEFW	63		;directory max
+fa96  c0              97     97 	DEFB	192		;alloc 0
+fa97  00              98     98 	DEFB	0		;alloc 1
+fa98  10 00           99     99 	DEFW	16		;check size
+fa9a  02 00          100    100 	DEFW	2		;track offset
+                     101    101 ;
+                     102    102 ;	fixed data tables for 4MB harddisks
+                     103    103 ;
+                     104    104 ;	disk parameter header
+fa9c  00 00 00 00    105    105 HDB1:	DEFW	0000H,0000H
+faa0  00 00 00 00    106    106 	DEFW	0000H,0000H
+faa4  30 fc bc fa    107    107 	DEFW	DIRBF,HDBLK
+faa8  6a ff 2c fd    108    108 	DEFW	CHKHD1,ALLHD1
+faac  00 00 00 00    109    109 HDB2:	DEFW	0000H,0000H
+fab0  00 00 00 00    110    110 	DEFW	0000H,0000H
+fab4  30 fc bc fa    111    111 	DEFW	DIRBF,HDBLK
+fab8  6a ff 2b fe    112    112 	DEFW	CHKHD2,ALLHD2
+                     113    113 ;
+                     114    114 ;       disk parameter block for harddisk
+                     115    115 ;
+fabc  80 00          116    116 HDBLK:  DEFW    128		;sectors per track
+fabe  04             117    117 	DEFB    4		;block shift factor
+fabf  0f             118    118 	DEFB    15		;block mask
+fac0  00             119    119 	DEFB    0		;extent mask
+fac1  f7 07          120    120 	DEFW    2039		;disk size-1
+Z80-Assembler		Release 1.6				Page 3
+Source file: bios.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+fac3  ff 03          121    121 	DEFW    1023		;directory max
+fac5  ff             122    122 	DEFB    255		;alloc 0
+fac6  ff             123    123 	DEFB    255		;alloc 1
+fac7  00 00          124    124 	DEFW    0		;check size
+fac9  00 00          125    125 	DEFW    0		;track offset
+                     126    126 ;
+                     127    127 ;	messages
+                     128    128 ;
+facb  36 34 4b 20    129    129 SIGNON: DEFM	'64K CP/M Vers. 2.2 (Z80 CBIOS V1.2 for Z80SIM, '
+facf  43 50 2f 4d    129    130
+fad3  20 56 65 72    129    131
+fad7  73 2e 20 32    129    132
+fadb  2e 32 20 28    129    133
+fadf  5a 38 30 20    129    134
+fae3  43 42 49 4f    129    135
+fae7  53 20 56 31    129    136
+faeb  2e 32 20 66    129    137
+faef  6f 72 20 5a    129    138
+faf3  38 30 53 49    129    139
+faf7  4d 2c 20       129    140
+fafa  43 6f 70 79    130    141 	DEFM	'Copyright 1988-2007 by Udo Munk)'
+fafe  72 69 67 68    130    142
+fb02  74 20 31 39    130    143
+fb06  38 38 2d 32    130    144
+fb0a  30 30 37 20    130    145
+fb0e  62 79 20 55    130    146
+fb12  64 6f 20 4d    130    147
+fb16  75 6e 6b 29    130    148
+fb1a  0d 0a 00       131    149 	DEFB	13,10,0
+                     132    150 ;
+fb1d  42 49 4f 53    133    151 LDERR:	DEFM	'BIOS: error booting'
+fb21  3a 20 65 72    133    152
+fb25  72 6f 72 20    133    153
+fb29  62 6f 6f 74    133    154
+fb2d  69 6e 67       133    155
+fb30  0d 0a 00       134    156 	DEFB	13,10,0
+                     135    157 
+                     136    158 ;
+                     137    159 ;	end of fixed tables
+                     138    160 ;
+                     139    161 ;	utility functions
+                     140    162 ;
+                     141    163 ;	print a 0 terminated string to console device
+                     142    164 ;	pointer to string in HL
+                     143    165 ;
+fb33  7e             144    166 PRTMSG:	LD	A,(HL)
+fb34  b7             145    167 	OR	A
+fb35  c8             146    168 	RET	Z
+fb36  4f             147    169 	LD	C,A
+fb37  cd c2 fb       148    170 	CALL	CONOUT
+fb3a  23             149    171 	INC	HL
+fb3b  c3 33 fb       150    172 	JP	PRTMSG
+                     151    173 ;
+                     152    174 ;	individual subroutines to perform each function
+                     153    175 ;	simplest case is to just perform parameter initialization
+                     154    176 ;
+fb3e  31 80 00       155    177 BOOT:   LD	SP,80H		;use space below buffer for stack
+fb41  21 cb fa       156    178 	LD	HL,SIGNON	;print message
+fb44  cd 33 fb       157    179 	CALL	PRTMSG
+fb47  af             158    180 	XOR	A		;zero in the accum
+Z80-Assembler		Release 1.6				Page 4
+Source file: bios.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+fb48  32 03 00       159    181 	LD	(IOBYTE),A	;clear the iobyte
+fb4b  32 04 00       160    182 	LD	(CDISK),A	;select disk zero
+fb4e  c3 9b fb       161    183 	JP	GOCPM		;initialize and go to cp/m
+                     162    184 ;
+                     163    185 ;	simplest case is to read the disk until all sectors loaded
+                     164    186 ;
+fb51  31 80 00       165    187 WBOOT:  LD	SP,80H		;use space below buffer for stack
+fb54  0e 00          166    188 	LD	C,0		;select disk 0
+fb56  cd d9 fb       167    189 	CALL	SELDSK
+fb59  cd d4 fb       168    190 	CALL	HOME		;go to track 00
+                     169    191 ;
+fb5c  06 2c          170    192 	LD	B,NSECTS	;b counts # of sectors to load
+fb5e  0e 00          171    193 	LD	C,0		;c has the current track number
+fb60  16 02          172    194 	LD	D,2		;d has the next sector to read
+                     173    195 ;	note that we begin by reading track 0, sector 2 since sector 1
+                     174    196 ;	contains the cold start loader, which is skipped in a warm start
+fb62  21 00 e4       175    197 	LD	HL,CCP		;base of cp/m (initial load point)
+                     176    198 LOAD1:				;load one more sector
+fb65  c5             177    199 	PUSH	BC		;save sector count, current track
+fb66  d5             178    200 	PUSH	DE		;save next sector to read
+fb67  e5             179    201 	PUSH	HL		;save dma address
+fb68  4a             180    202 	LD	C,D		;get sector address to register c
+fb69  cd 09 fc       181    203 	CALL	SETSEC		;set sector address from register c
+fb6c  c1             182    204 	POP	BC		;recall dma address to b,c
+fb6d  c5             183    205 	PUSH	BC		;replace on stack for later recall
+fb6e  cd 1e fc       184    206 	CALL	SETDMA		;set dma address from b,c
+                     185    207 ;	drive set to 0, track set, sector set, dma address set
+fb71  cd 25 fc       186    208 	CALL	READ
+fb74  b7             187    209 	OR	A		;any errors?
+fb75  ca 80 fb       188    210 	JP	Z,LOAD2		;no, continue
+fb78  21 1d fb       189    211 	LD	HL,LDERR	;error, print message
+fb7b  cd 33 fb       190    212 	CALL	PRTMSG
+fb7e  f3             191    213 	DI			;and halt the machine
+fb7f  76             192    214 	HALT
+                     193    215 ;	no error, move to next sector
+fb80  e1             194    216 LOAD2:	POP	HL		;recall dma address
+fb81  11 80 00       195    217 	LD	DE,128		;dma=dma+128
+fb84  19             196    218 	ADD	HL,DE		;new dma address is in h,l
+fb85  d1             197    219 	POP	DE		;recall sector address
+fb86  c1             198    220 	POP	BC		;recall number of sectors remaining,
+                     199    221 				;and current trk
+fb87  05             200    222 	DEC	B		;sectors=sectors-1
+fb88  ca 9b fb       201    223 	JP	Z,GOCPM		;transfer to cp/m if all have been loaded
+                     202    224 ;	more sectors remain to load, check for track change
+fb8b  14             203    225 	INC	D
+fb8c  7a             204    226 	LD	A,D		;sector=27?, if so, change tracks
+fb8d  fe 1b          205    227 	CP	27
+fb8f  da 65 fb       206    228 	JP	C,LOAD1		;carry generated if sector<27
+                     207    229 ;	end of current track, go to next track
+fb92  16 01          208    230 	LD	D,1		;begin with first sector of next track
+fb94  0c             209    231 	INC	C		;track=track+1
+                     210    232 ;	save register state, and change tracks
+fb95  cd 05 fc       211    233 	CALL	SETTRK		;track address set from register c
+fb98  c3 65 fb       212    234 	JP	LOAD1		;for another sector
+                     213    235 ;	end of load operation, set parameters and go to cp/m
+                     214    236 GOCPM:
+fb9b  3e c3          215    237 	LD	A,0C3H		;c3 is a jmp instruction
+fb9d  32 00 00       216    238 	LD	(0),A		;for jmp to wboot
+fba0  21 03 fa       217    239 	LD	HL,WBOOTE	;wboot entry point
+fba3  22 01 00       218    240 	LD	(1),HL		;set address field for jmp at 0
+Z80-Assembler		Release 1.6				Page 5
+Source file: bios.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                     219    241 ;
+fba6  32 05 00       220    242 	LD	(5),A		;for jmp to bdos
+fba9  21 06 ec       221    243 	LD	HL,BDOS		;bdos entry point
+fbac  22 06 00       222    244 	LD	(6),HL		;address field of jump at 5 to bdos
+                     223    245 ;
+fbaf  01 80 00       224    246 	LD	BC,80H		;default dma address is 80h
+fbb2  cd 1e fc       225    247 	CALL	SETDMA
+                     226    248 ;
+fbb5  3a 04 00       227    249 	LD	A,(CDISK)	;get current disk number
+fbb8  4f             228    250 	LD	C,A		;send to the ccp
+fbb9  c3 00 e4       229    251 	JP	CCP		;go to cp/m for further processing
+                     230    252 ;
+                     231    253 ;
+                     232    254 ;	simple i/o handlers
+                     233    255 ;
+                     234    256 ;	console status, return 0ffh if character ready, 00h if not
+                     235    257 ;
+fbbc  db 00          236    258 CONST:	IN	A,(CONSTA)	;get console status
+fbbe  c9             237    259 	RET
+                     238    260 ;
+                     239    261 ;	console character into register a
+                     240    262 ;
+fbbf  db 01          241    263 CONIN:	IN	A,(CONDAT)	;get character from console
+fbc1  c9             242    264 	RET
+                     243    265 ;
+                     244    266 ;	console character output from register c
+                     245    267 ;
+fbc2  79             246    268 CONOUT: LD	A,C		;get to accumulator
+fbc3  d3 01          247    269 	OUT	(CONDAT),A	;send character to console
+fbc5  c9             248    270 	RET
+                     249    271 ;
+                     250    272 ;	list character from register c
+                     251    273 ;
+fbc6  79             252    274 LIST:	LD	A,C		;character to register a
+fbc7  d3 03          253    275 	OUT	(PRTDAT),A
+fbc9  c9             254    276 	RET
+                     255    277 ;
+                     256    278 ;	return list status (00h if not ready, 0ffh if ready)
+                     257    279 ;
+fbca  db 02          258    280 LISTST: IN	A,(PRTSTA)
+fbcc  c9             259    281 	RET
+                     260    282 ;
+                     261    283 ;	punch character from register c
+                     262    284 ;
+fbcd  79             263    285 PUNCH:	LD	A,C		;character to register a
+fbce  d3 05          264    286 	OUT	(AUXDAT),A
+fbd0  c9             265    287 	RET
+                     266    288 ;
+                     267    289 ;	read character into register a from reader device
+                     268    290 ;
+fbd1  db 05          269    291 READER: IN	A,(AUXDAT)
+fbd3  c9             270    292 	RET
+                     271    293 ;
+                     272    294 ;
+                     273    295 ;	i/o drivers for the disk follow
+                     274    296 ;
+                     275    297 ;	move to the track 00 position of current drive
+                     276    298 ;	translate this call into a settrk call with parameter 00
+                     277    299 ;
+fbd4  0e 00          278    300 HOME:	LD	C,0		;select track 0
+Z80-Assembler		Release 1.6				Page 6
+Source file: bios.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+fbd6  c3 05 fc       279    301 	JP	SETTRK		;we will move to 00 on first read/write
+                     280    302 ;
+                     281    303 ;	select disk given by register C
+                     282    304 ;
+fbd9  21 00 00       283    305 SELDSK: LD	HL,0000H	;error return code
+fbdc  79             284    306 	LD	A,C
+fbdd  fe 04          285    307 	CP	4		;FD drive 0-3?
+fbdf  da ed fb       286    308 	JP	C,SELFD		;go
+fbe2  fe 08          287    309 	CP	8		;harddisk 1?
+fbe4  ca f9 fb       288    310 	JP	Z,SELHD1	;go
+fbe7  fe 09          289    311 	CP	9		;harddisk 2?
+fbe9  ca ff fb       290    312 	JP	Z,SELHD2	;go
+fbec  c9             291    313 	RET			;no, error
+                     292    314 ;	disk number is in the proper range
+                     293    315 ;	compute proper disk parameter header address
+fbed  d3 0a          294    316 SELFD:	OUT	(FDCD),A	;selekt disk drive
+fbef  6f             295    317 	LD	L,A		;L=disk number 0,1,2,3
+fbf0  29             296    318 	ADD	HL,HL		;*2
+fbf1  29             297    319 	ADD	HL,HL		;*4
+fbf2  29             298    320 	ADD	HL,HL		;*8
+fbf3  29             299    321 	ADD	HL,HL		;*16 (size of each header)
+fbf4  11 33 fa       300    322 	LD	DE,DPBASE
+fbf7  19             301    323 	ADD	HL,DE		;HL=.dpbase(diskno*16)
+fbf8  c9             302    324 	RET
+fbf9  21 9c fa       303    325 SELHD1:	LD	HL,HDB1		;dph harddisk 1
+fbfc  c3 02 fc       304    326 	JP	SELHD
+fbff  21 ac fa       305    327 SELHD2:	LD	HL,HDB2		;dph harddisk 2
+fc02  d3 0a          306    328 SELHD:	OUT	(FDCD),A	;select harddisk drive
+fc04  c9             307    329 	RET
+                     308    330 ;
+                     309    331 ;	set track given by register c
+                     310    332 ;
+fc05  79             311    333 SETTRK: LD	A,C
+fc06  d3 0b          312    334 	OUT	(FDCT),A
+fc08  c9             313    335 	RET
+                     314    336 ;
+                     315    337 ;	set sector given by register c
+                     316    338 ;
+fc09  79             317    339 SETSEC: LD	A,C
+fc0a  d3 0c          318    340 	OUT	(FDCS),A
+fc0c  c9             319    341 	RET
+                     320    342 ;
+                     321    343 ;	translate the sector given by BC using the
+                     322    344 ;	translate table given by DE
+                     323    345 ;
+                     324    346 SECTRAN:
+fc0d  7a             325    347 	LD	A,D		;do we have a translation table?
+fc0e  b3             326    348 	OR	E
+fc0f  c2 18 fc       327    349 	JP	NZ,SECT1	;yes, translate
+fc12  69             328    350 	LD	L,C		;no, return untranslated
+fc13  60             329    351 	LD	H,B		;in HL
+fc14  2c             330    352 	INC	L		;sector no. start with 1
+fc15  c0             331    353 	RET	NZ
+fc16  24             332    354 	INC	H
+fc17  c9             333    355 	RET
+fc18  eb             334    356 SECT1:	EX	DE,HL		;HL=.trans
+fc19  09             335    357 	ADD	HL,BC		;HL=.trans(sector)
+fc1a  6e             336    358 	LD	L,(HL)		;L = trans(sector)
+fc1b  26 00          337    359 	LD	H,0		;HL= trans(sector)
+fc1d  c9             338    360 	RET			;with value in HL
+Z80-Assembler		Release 1.6				Page 7
+Source file: bios.asm
+Title:       
+
+LOC   OBJECT CODE   LINE   STMT SOURCE CODE
+                     339    361 ;
+                     340    362 ;	set dma address given by registers b and c
+                     341    363 ;
+fc1e  79             342    364 SETDMA: LD	A,C		;low order address
+fc1f  d3 0f          343    365 	OUT	(DMAL),A
+fc21  78             344    366 	LD	A,B		;high order address
+fc22  d3 10          345    367 	OUT	(DMAH),A	;in dma
+fc24  c9             346    368 	RET
+                     347    369 ;
+                     348    370 ;	perform read operation
+                     349    371 ;
+fc25  af             350    372 READ:	XOR	A		;read command -> A
+fc26  c3 2b fc       351    373 	JP	WAITIO		;to perform the actual i/o
+                     352    374 ;
+                     353    375 ;	perform a write operation
+                     354    376 ;
+fc29  3e 01          355    377 WRITE:	LD	A,1		;write command -> A
+                     356    378 ;
+                     357    379 ;	enter here from read and write to perform the actual i/o
+                     358    380 ;	operation.  return a 00h in register a if the operation completes
+                     359    381 ;	properly, and 01h if an error occurs during the read or write
+                     360    382 ;
+fc2b  d3 0d          361    383 WAITIO: OUT	(FDCOP),A	;start i/o operation
+fc2d  db 0e          362    384 	IN	A,(FDCST)	;status of i/o operation -> A
+fc2f  c9             363    385 	RET
+                     364    386 ;
+                     365    387 ;	the remainder of the CBIOS is reserved uninitialized
+                     366    388 ;	data area, and does not need to be a part of the
+                     367    389 ;	system memory image (the space must be available,
+                     368    390 ;	however, between "begdat" and "enddat").
+                     369    391 ;
+                     370    392 ;	scratch ram area for BDOS use
+                     371    393 ;
+fc30                 372    394 BEGDAT	EQU	$		;beginning of data area
+fc30                 373    395 DIRBF:	DEFS	128		;scratch directory area
+fcb0                 374    396 ALL00:	DEFS	31		;allocation vector 0
+fccf                 375    397 ALL01:	DEFS	31		;allocation vector 1
+fcee                 376    398 ALL02:	DEFS	31		;allocation vector 2
+fd0d                 377    399 ALL03:	DEFS	31		;allocation vector 3
+fd2c                 378    400 ALLHD1:	DEFS	255		;allocation vector harddisk 1
+fe2b                 379    401 ALLHD2:	DEFS	255		;allocation vector harddisk 2
+ff2a                 380    402 CHK00:	DEFS	16		;check vector 0
+ff3a                 381    403 CHK01:	DEFS	16		;check vector 1
+ff4a                 382    404 CHK02:	DEFS	16		;check vector 2
+ff5a                 383    405 CHK03:	DEFS	16		;check vector 3
+ff6a                 384    406 CHKHD1:	DEFS	0		;check vector harddisk 1
+ff6a                 385    407 CHKHD2:	DEFS	0		;check vector harddisk 2
+                     386    408 ;
+ff6a                 387    409 ENDDAT	EQU	$		;end of data area
+033a                 388    410 DATSIZ	EQU	$-BEGDAT	;size of data area
+                     389    411 ;
+ff6a                 390    412 	END			;of BIOS
+Z80-Assembler		Release 1.6				Page 8
+Source file: bios.asm
+Title:       Symboltable
+
+ALL00    fcb0	ALL01    fccf	ALL02    fcee	ALL03    fd0d	
+ALLHD1   fd2c	ALLHD2   fe2b	AUXDAT   0005	BDOS     ec06	
+BEGDAT   fc30	BIAS     b000	BIOS     fa00	BOOT     fb3e	
+CCP      e400	CDISK    0004	CHK00    ff2a	CHK01    ff3a	
+CHK02    ff4a	CHK03    ff5a	CHKHD1   ff6a	CHKHD2   ff6a	
+CONDAT   0001	CONIN    fbbf	CONOUT   fbc2	CONST    fbbc	
+CONSTA   0000	DATSIZ   033a	DIRBF    fc30	DMAH     0010	
+DMAL     000f	DPBASE   fa33	DPBLK    fa8d	ENDDAT   ff6a	
+FDCD     000a	FDCOP    000d	FDCS     000c	FDCST    000e	
+FDCT     000b	GOCPM    fb9b	HDB1     fa9c	HDB2     faac	
+HDBLK    fabc	HOME     fbd4	IOBYTE   0003	LDERR    fb1d	
+LIST     fbc6	LISTST   fbca	LOAD1    fb65	LOAD2    fb80	
+MSIZE    0040	NSECTS   002c	PRTDAT   0003	PRTMSG   fb33	
+PRTSTA   0002	PUNCH    fbcd	READ     fc25	READER   fbd1	
+SECT1    fc18	SECTRAN  fc0d	SELDSK   fbd9	SELFD    fbed	
+SELHD    fc02	SELHD1   fbf9	SELHD2   fbff	SETDMA   fc1e	
+SETSEC   fc09	SETTRK   fc05	SIGNON   facb	TRANS    fa73	
+WAITIO   fc2b	WBOOT    fb51	WBOOTE   fa03	WRITE    fc29	

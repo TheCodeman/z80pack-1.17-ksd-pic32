@@ -1,0 +1,1 @@
+M:\mpide-0022-chipkit-win-20110619\hardware\tools\avr\bin\avrdude -C M:\mpide-0022-chipkit-win-20110619\hardware\tools\avr\etc\avrdude.conf -c stk500v2 -P COM3 -p pic32 -b 115200 -U flash:w:M:\z80pack-1.17\z80pack-1.17.X\dist\CPM-chipKit\production\z80pack-1.17.X.production.hex:i -v

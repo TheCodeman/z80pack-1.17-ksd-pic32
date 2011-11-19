@@ -1,0 +1,6 @@
+#!/bin/sh
+
+rm -f disks/drive[ab].cpm
+ln disks/library/mpm-1.dsk disks/drivea.cpm
+ln disks/library/mpm-2.dsk disks/driveb.cpm
+./cpmsim
